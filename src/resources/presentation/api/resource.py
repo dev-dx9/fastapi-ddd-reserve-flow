@@ -99,8 +99,10 @@ async def update_resource(
                 detail='Resource not found',
             )
 
-        model.name = request.name
-        model.qty = request.qty
+        for field, value in request.model_dump(
+            exclude_unset=True,
+        ).items():
+            setattr(model, field, value)
 
         await session.commit()
         await session.refresh(model)

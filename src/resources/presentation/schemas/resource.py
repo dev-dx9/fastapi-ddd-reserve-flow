@@ -9,8 +9,8 @@ class CreateResourceRequest(BaseModel):
 
 
 class UpdateResourceRequest(BaseModel):
-    name: str
-    qty: int
+    name: str | None = None
+    qty: int | None = None
 
 
 class ResourceResponse(BaseModel):
