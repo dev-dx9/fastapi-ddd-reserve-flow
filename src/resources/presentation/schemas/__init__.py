@@ -1,3 +1,8 @@
+from .resource import (
+    CreateResourceRequest,
+    ResourceResponse,
+    UpdateResourceRequest,
+)
 from .resource_group import (
     CreateResourceGroupRequest,
     ResourceGroupResponse,
@@ -6,6 +11,9 @@ from .resource_group import (
 
 __all__ = [
     'CreateResourceGroupRequest',
+    'CreateResourceRequest',
     'ResourceGroupResponse',
+    'ResourceResponse',
     'UpdateResourceGroupRequest',
+    'UpdateResourceRequest',
 ]
