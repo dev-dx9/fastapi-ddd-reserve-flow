@@ -1,10 +1,11 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
 
 from src.database import AsyncSessionFactory
-from src.resources.infrastructure.models import ResourceGroupModel
+from src.resources.infrastructure.repositories import (
+    SQLAlchemyResourceGroupRepository,
+)
 from src.resources.presentation.schemas import (
     CreateResourceGroupRequest,
     ResourceGroupResponse,
@@ -23,11 +24,8 @@ router = APIRouter(
 )
 async def get_resource_groups() -> list[ResourceGroupResponse]:
     async with AsyncSessionFactory() as session:
-        models = (
-            await session.scalars(
-                select(ResourceGroupModel),
-            )
-        ).all()
+        repository = SQLAlchemyResourceGroupRepository(session)
+        models = await repository.get_all()
 
         return [ResourceGroupResponse.model_validate(model) for model in models]
 
@@ -41,11 +39,8 @@ async def create_resource_group(
     request: CreateResourceGroupRequest,
 ) -> ResourceGroupResponse:
     async with AsyncSessionFactory() as session:
-        model = ResourceGroupModel(
-            name=request.name,
-        )
-
-        session.add(model)
+        repository = SQLAlchemyResourceGroupRepository(session)
+        model = await repository.add(request)
 
         await session.commit()
         await session.refresh(model)
@@ -61,10 +56,8 @@ async def get_resource_group(
     resource_group_id: UUID,
 ) -> ResourceGroupResponse:
     async with AsyncSessionFactory() as session:
-        model = await session.get(
-            ResourceGroupModel,
-            resource_group_id,
-        )
+        repository = SQLAlchemyResourceGroupRepository(session)
+        model = await repository.get_by_id(resource_group_id)
 
         if model is None:
             raise HTTPException(
@@ -84,10 +77,8 @@ async def update_resource_group(
     request: UpdateResourceGroupRequest,
 ) -> ResourceGroupResponse:
     async with AsyncSessionFactory() as session:
-        model = await session.get(
-            ResourceGroupModel,
-            resource_group_id,
-        )
+        repository = SQLAlchemyResourceGroupRepository(session)
+        model = await repository.get_by_id(resource_group_id)
 
         if model is None:
             raise HTTPException(
@@ -96,6 +87,7 @@ async def update_resource_group(
             )
 
         model.name = request.name
+
         await session.commit()
         await session.refresh(model)
 
@@ -110,10 +102,8 @@ async def delete_resource_group(
     resource_group_id: UUID,
 ) -> None:
     async with AsyncSessionFactory() as session:
-        model = await session.get(
-            ResourceGroupModel,
-            resource_group_id,
-        )
+        repository = SQLAlchemyResourceGroupRepository(session)
+        model = await repository.get_by_id(resource_group_id)
 
         if model is None:
             raise HTTPException(
