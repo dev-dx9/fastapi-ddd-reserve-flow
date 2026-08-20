@@ -5,7 +5,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database import Base
-from src.resources.infrastructure.common import (
+from src.database_types import (
     uuid_pk,
 )
 

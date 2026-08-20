@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Mapped
 
 from src.database import Base
-from src.resources.infrastructure.common import uuid_pk
+from src.database_types import (
+    uuid_pk,
+)
 
 
 class ResourceGroupModel(Base):
