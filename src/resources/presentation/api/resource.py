@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.database import AsyncSessionFactory
+from src.dependencies import SessionDep
 from src.resources.infrastructure.repositories import (
     SQLAlchemyResourceGroupRepository,
     SQLAlchemyResourceRepository,
@@ -25,22 +25,23 @@ router = APIRouter(
 )
 async def get_resources(
     resource_group_id: UUID,
+    session: SessionDep,
 ) -> list[ResourceResponse]:
-    async with AsyncSessionFactory() as session:
-        resource_group_repository = SQLAlchemyResourceGroupRepository(session)
-        resource_group = await resource_group_repository.get_by_id(
-            resource_group_id,
+    resource_group_repository = SQLAlchemyResourceGroupRepository(session)
+    resource_group = await resource_group_repository.get_by_id(
+        resource_group_id,
+    )
+
+    if resource_group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource group not found',
         )
 
-        if resource_group is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Resource group not found'
-            )
+    repository = SQLAlchemyResourceRepository(session)
+    models = await repository.get_all(resource_group_id)
 
-        repository = SQLAlchemyResourceRepository(session)
-        models = await repository.get_all(resource_group_id)
-
-        return [ResourceResponse.model_validate(model) for model in models]
+    return [ResourceResponse.model_validate(model) for model in models]
 
 
 @router.post(
@@ -51,28 +52,29 @@ async def get_resources(
 async def create_resource(
     resource_group_id: UUID,
     request: CreateResourceRequest,
+    session: SessionDep,
 ) -> ResourceResponse:
-    async with AsyncSessionFactory() as session:
-        resource_group_repository = SQLAlchemyResourceGroupRepository(session)
-        resource_group = await resource_group_repository.get_by_id(
-            resource_group_id,
+    resource_group_repository = SQLAlchemyResourceGroupRepository(session)
+    resource_group = await resource_group_repository.get_by_id(
+        resource_group_id,
+    )
+
+    if resource_group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource group not found',
         )
 
-        if resource_group is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Resource group not found'
-            )
+    repository = SQLAlchemyResourceRepository(session)
+    model = await repository.add(
+        resource_group_id,
+        request,
+    )
 
-        repository = SQLAlchemyResourceRepository(session)
-        model = await repository.add(
-            resource_group_id,
-            request,
-        )
+    await session.commit()
+    await session.refresh(model)
 
-        await session.commit()
-        await session.refresh(model)
-
-        return ResourceResponse.model_validate(model)
+    return ResourceResponse.model_validate(model)
 
 
 @router.get(
@@ -82,30 +84,32 @@ async def create_resource(
 async def get_resource(
     resource_group_id: UUID,
     resource_id: UUID,
+    session: SessionDep,
 ) -> ResourceResponse:
-    async with AsyncSessionFactory() as session:
-        resource_group_repository = SQLAlchemyResourceGroupRepository(session)
-        resource_group = await resource_group_repository.get_by_id(
-            resource_group_id,
+    resource_group_repository = SQLAlchemyResourceGroupRepository(session)
+    resource_group = await resource_group_repository.get_by_id(
+        resource_group_id,
+    )
+
+    if resource_group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource group not found',
         )
 
-        if resource_group is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Resource group not found'
-            )
+    repository = SQLAlchemyResourceRepository(session)
+    model = await repository.get_by_id(
+        resource_id,
+        resource_group_id,
+    )
 
-        repository = SQLAlchemyResourceRepository(session)
-        model = await repository.get_by_id(
-            resource_id,
-            resource_group_id,
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource not found',
         )
 
-        if model is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Resource not found'
-            )
-
-        return ResourceResponse.model_validate(model)
+    return ResourceResponse.model_validate(model)
 
 
 @router.patch(
@@ -116,39 +120,40 @@ async def update_resource(
     resource_group_id: UUID,
     resource_id: UUID,
     request: UpdateResourceRequest,
+    session: SessionDep,
 ) -> ResourceResponse:
-    async with AsyncSessionFactory() as session:
-        resource_group_repository = SQLAlchemyResourceGroupRepository(session)
-        resource_group = await resource_group_repository.get_by_id(
-            resource_group_id,
+    resource_group_repository = SQLAlchemyResourceGroupRepository(session)
+    resource_group = await resource_group_repository.get_by_id(
+        resource_group_id,
+    )
+
+    if resource_group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource group not found',
         )
 
-        if resource_group is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Resource group not found'
-            )
+    repository = SQLAlchemyResourceRepository(session)
+    model = await repository.get_by_id(
+        resource_id,
+        resource_group_id,
+    )
 
-        repository = SQLAlchemyResourceRepository(session)
-        model = await repository.get_by_id(
-            resource_id,
-            resource_group_id,
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource not found',
         )
 
-        if model is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='Resource not found',
-            )
+    for field, value in request.model_dump(
+        exclude_unset=True,
+    ).items():
+        setattr(model, field, value)
 
-        for field, value in request.model_dump(
-            exclude_unset=True,
-        ).items():
-            setattr(model, field, value)
+    await session.commit()
+    await session.refresh(model)
 
-        await session.commit()
-        await session.refresh(model)
-
-        return ResourceResponse.model_validate(model)
+    return ResourceResponse.model_validate(model)
 
 
 @router.delete(
@@ -158,26 +163,27 @@ async def update_resource(
 async def delete_resource(
     resource_group_id: UUID,
     resource_id: UUID,
+    session: SessionDep,
 ) -> None:
-    async with AsyncSessionFactory() as session:
-        resource_group_repository = SQLAlchemyResourceGroupRepository(session)
-        resource_group = await resource_group_repository.get_by_id(
-            resource_group_id,
+    resource_group_repository = SQLAlchemyResourceGroupRepository(session)
+    resource_group = await resource_group_repository.get_by_id(
+        resource_group_id,
+    )
+
+    if resource_group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource group not found',
         )
 
-        if resource_group is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Resource group not found'
-            )
+    repository = SQLAlchemyResourceRepository(session)
+    model = await repository.get_by_id(resource_id, resource_group_id)
 
-        repository = SQLAlchemyResourceRepository(session)
-        model = await repository.get_by_id(resource_id, resource_group_id)
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Resource not found',
+        )
 
-        if model is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='Resource not found',
-            )
-
-        await session.delete(model)
-        await session.commit()
+    await session.delete(model)
+    await session.commit()
